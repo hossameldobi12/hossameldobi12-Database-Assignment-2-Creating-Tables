@@ -1,0 +1,263 @@
+
+
+--3.1  Connect everything.
+
+ALTER TABLE UserManagement.CITY
+ADD CONSTRAINT FK_CITY_COUNTRY
+    FOREIGN KEY (CountryCode)
+    REFERENCES UserManagement.COUNTRY(CountryCode)
+    ON DELETE NO ACTION;
+GO
+
+ALTER TABLE UserManagement.MEMBER
+ADD CONSTRAINT FK_MEMBER_CITY
+    FOREIGN KEY (CityId)
+    REFERENCES UserManagement.CITY(CityId)
+    ON DELETE NO ACTION;
+GO
+
+ALTER TABLE UserManagement.MEMBER
+ADD CONSTRAINT FK_MEMBER_ReferredByMember
+    FOREIGN KEY (ReferredByMemberId)
+    REFERENCES UserManagement.MEMBER(MemberId)
+    ON DELETE NO ACTION;
+GO
+
+ALTER TABLE UserManagement.WALLET
+ADD CONSTRAINT FK_WALLET_MEMBER
+    FOREIGN KEY (MemberId)
+    REFERENCES UserManagement.MEMBER(MemberId)
+    ON DELETE NO ACTION;
+GO
+
+ALTER TABLE UserManagement.EMPLOYEE
+ADD CONSTRAINT FK_EMPLOYEE_MEMBER
+    FOREIGN KEY (MemberId)
+    REFERENCES UserManagement.MEMBER(MemberId)
+    ON DELETE NO ACTION;
+GO
+
+ALTER TABLE UserManagement.EMPLOYEE
+ADD CONSTRAINT FK_EMPLOYEE_WAREHOUSE
+    FOREIGN KEY (WarehouseId)
+    REFERENCES Inventory.WAREHOUSE(WarehouseId)
+    ON DELETE NO ACTION;
+GO
+
+ALTER TABLE Inventory.WAREHOUSE
+ADD CONSTRAINT FK_WAREHOUSE_CITY
+    FOREIGN KEY (CityId)
+    REFERENCES UserManagement.CITY(CityId)
+    ON DELETE NO ACTION;
+GO
+
+ALTER TABLE Inventory.WAREHOUSE
+ADD CONSTRAINT FK_WAREHOUSE_MANAGER
+    FOREIGN KEY (ManagerId)
+    REFERENCES UserManagement.EMPLOYEE(MemberId)
+    ON DELETE NO ACTION;
+GO
+
+ALTER TABLE Inventory.CATEGORY
+ADD CONSTRAINT FK_CATEGORY_PARENT
+    FOREIGN KEY (ParentCategoryCode)
+    REFERENCES Inventory.CATEGORY(CategoryCode)
+    ON DELETE NO ACTION;
+GO
+
+ALTER TABLE Inventory.ITEM
+ADD CONSTRAINT FK_ITEM_SELLER
+    FOREIGN KEY (SellerMemberId)
+    REFERENCES UserManagement.MEMBER(MemberId)
+    ON DELETE NO ACTION;
+GO
+
+ALTER TABLE Inventory.ITEM
+ADD CONSTRAINT FK_ITEM_CATEGORY
+    FOREIGN KEY (CategoryCode)
+    REFERENCES Inventory.CATEGORY(CategoryCode)
+    ON DELETE NO ACTION;
+GO
+
+ALTER TABLE Inventory.ITEM
+ADD CONSTRAINT FK_ITEM_WAREHOUSE
+    FOREIGN KEY (WarehouseId)
+    REFERENCES Inventory.WAREHOUSE(WarehouseId)
+    ON DELETE NO ACTION;
+GO
+
+ALTER TABLE Inventory.ITEM
+ADD CONSTRAINT FK_ITEM_INSPECTOR
+    FOREIGN KEY (InspectorMemberId)
+    REFERENCES UserManagement.EMPLOYEE(MemberId)
+    ON DELETE NO ACTION;
+GO
+
+ALTER TABLE Inventory.ITEMPHOTO
+ADD CONSTRAINT FK_ITEMPHOTO_ITEM
+    FOREIGN KEY (ItemId)
+    REFERENCES Inventory.ITEM(ItemId)
+    ON DELETE CASCADE;
+GO
+
+ALTER TABLE Auctions.AUCTION
+ADD CONSTRAINT FK_AUCTION_ITEM
+    FOREIGN KEY (ItemId)
+    REFERENCES Inventory.ITEM(ItemId)
+    ON DELETE NO ACTION;
+GO
+
+ALTER TABLE Auctions.BID
+ADD CONSTRAINT FK_BID_AUCTION
+    FOREIGN KEY (AuctionId)
+    REFERENCES Auctions.AUCTION(AuctionId)
+    ON DELETE NO ACTION;
+GO
+
+ALTER TABLE Auctions.BID
+ADD CONSTRAINT FK_BID_MEMBER
+    FOREIGN KEY (MemberId)
+    REFERENCES UserManagement.MEMBER(MemberId)
+    ON DELETE NO ACTION;
+GO
+
+ALTER TABLE Engagement.FOLLOWEDAUCTION
+ADD CONSTRAINT FK_FOLLOWEDAUCTION_MEMBER
+    FOREIGN KEY (MemberId)
+    REFERENCES UserManagement.MEMBER(MemberId)
+    ON DELETE NO ACTION;
+GO
+
+ALTER TABLE Engagement.FOLLOWEDAUCTION
+ADD CONSTRAINT FK_FOLLOWEDAUCTION_AUCTION
+    FOREIGN KEY (AuctionId)
+    REFERENCES Auctions.AUCTION(AuctionId)
+    ON DELETE NO ACTION;
+GO
+
+
+--3.2 Members choose an app language, ar or en
+
+ALTER TABLE UserManagement.MEMBER
+ADD LanguageCode CHAR(2) NOT NULL
+    CONSTRAINT DF_MEMBER_LanguageCode DEFAULT 'ar';
+GO
+
+--3.3 Items can be "featured"
+ALTER TABLE Inventory.ITEM
+ADD Featured BIT NOT NULL
+    CONSTRAINT DF_ITEM_Featured DEFAULT 0;
+GO
+
+
+--3.4 Naming review.
+EXEC sp_rename
+    'Auctions.BID.IpAddress',
+    'DeviceIp',
+    'COLUMN';
+GO
+
+
+ALTER TABLE Inventory.WAREHOUSE
+DROP CONSTRAINT CK_WAREHOUSE_Capacity;
+GO
+
+EXEC sp_rename
+    'Inventory.WAREHOUSE.Capacity',
+    'MaxItems',
+    'COLUMN';
+GO
+
+ALTER TABLE Inventory.WAREHOUSE
+ADD CONSTRAINT CK_WAREHOUSE_MaxItems
+    CHECK (MaxItems > 0);
+GO
+
+--3.5  Some names are longer than 100 characters.
+ALTER TABLE UserManagement.MEMBER
+ALTER COLUMN FullName NVARCHAR(150) NOT NULL;
+GO
+
+--3.6  No warehouse will hold more than 30,000 items.
+ALTER TABLE Inventory.WAREHOUSE
+DROP CONSTRAINT CK_WAREHOUSE_MaxItems;
+GO
+
+ALTER TABLE Inventory.WAREHOUSE
+ALTER COLUMN MaxItems SMALLINT NOT NULL;
+GO
+
+ALTER TABLE Inventory.WAREHOUSE
+ADD CONSTRAINT CK_WAREHOUSE_MaxItems
+    CHECK (MaxItems > 0);
+GO
+
+-- 3.7  Max commission is now 25 %
+ALTER TABLE Inventory.CATEGORY
+DROP CONSTRAINT CK_CATEGORY_CommissionPercentage;
+GO
+
+ALTER TABLE Inventory.CATEGORY
+ADD CONSTRAINT CK_CATEGORY_CommissionPercentage
+    CHECK (CommissionPercentage BETWEEN 0 AND 25);
+GO
+
+--3.8  Auctions must be reviewed first.
+
+ALTER TABLE Auctions.AUCTION
+DROP CONSTRAINT CK_AUCTION_Status;
+GO
+
+ALTER TABLE Auctions.AUCTION
+DROP CONSTRAINT DF_AUCTION_Status;
+GO
+
+ALTER TABLE Auctions.AUCTION
+ADD CONSTRAINT CK_AUCTION_Status
+    CHECK (Status IN ('PendingReview', 'Draft', 'Live', 'Ended', 'Cancelled'));
+GO
+
+ALTER TABLE Auctions.AUCTION
+ADD CONSTRAINT DF_AUCTION_Status
+    DEFAULT 'PendingReview' FOR Status;
+GO
+
+
+--3.9 Optional "Buy Now" price.
+
+ALTER TABLE Auctions.AUCTION
+WITH CHECK
+ADD
+    BuyNowPrice DECIMAL(12,2) NULL,
+    CONSTRAINT CK_AUCTION_BuyNowPrice
+        CHECK (BuyNowPrice IS NULL OR BuyNowPrice > StartingPrice);
+GO
+
+-- 3.10  Duplicate accounts were found.
+ALTER TABLE UserManagement.MEMBER
+ADD CONSTRAINT UQ_MEMBER_Mobile
+    UNIQUE (Mobile);
+GO
+
+--3.11 We need when a member was verified.
+ALTER TABLE UserManagement.MEMBER
+ADD VerifiedAt DATETIME2(3) NULL;
+GO
+
+ALTER TABLE UserManagement.MEMBER
+DROP CONSTRAINT DF_MEMBER_IsVerified;
+GO
+
+ALTER TABLE UserManagement.MEMBER
+DROP COLUMN IsVerified;
+GO
+
+--3.12   Marketing now owns engagement data.
+
+CREATE SCHEMA Marketing;
+GO
+
+ALTER SCHEMA Marketing
+TRANSFER Engagement.FOLLOWEDAUCTION;
+GO
+
